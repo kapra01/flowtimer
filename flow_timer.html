@@ -1,0 +1,1331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flow Timer</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
+
+:root {
+  --bg:       #080810;
+  --panel:    #10101a;
+  --card:     #14141f;
+  --border:   #1e1e30;
+  --text:     #dde0f0;
+  --muted:    #52526e;
+  --faint:    #1a1a28;
+
+  --warmup:   #f7c948;
+  --work:     #4df0a0;
+  --record:   #f04d9a;
+  --rest:     #4da8f0;
+
+  --warmup-bg: rgba(247,201,72,0.08);
+  --work-bg:   rgba(77,240,160,0.08);
+  --record-bg: rgba(240,77,154,0.08);
+  --rest-bg:   rgba(77,168,240,0.08);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { height:100%; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Outfit', sans-serif;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 16px 48px;
+}
+
+/* ── HEADER ── */
+.app-header {
+  width: 100%; max-width: 900px;
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 28px;
+}
+.app-title {
+  font-size: 22px; font-weight: 900; letter-spacing: -0.5px;
+  color: var(--text);
+}
+.app-title span { color: var(--work); }
+
+/* ── SETUP PANEL ── */
+#setupView {
+  width: 100%; max-width: 480px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 18px; padding: 28px;
+}
+.setup-title { font-size: 18px; font-weight: 700; margin-bottom: 22px; }
+.setup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label { font-size: 11px; letter-spacing: 1.5px; color: var(--muted); font-weight: 600; }
+.field input {
+  background: var(--faint); border: 1px solid var(--border);
+  border-radius: 10px; color: var(--text);
+  font-family: 'JetBrains Mono', monospace; font-size: 22px; font-weight: 700;
+  padding: 10px 14px; outline: none; width: 100%;
+  transition: border-color .2s;
+}
+.field input:focus { border-color: var(--work); }
+.field .hint { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+.color-bar {
+  width: 100%; height: 4px; border-radius: 2px; margin-bottom: 6px;
+}
+
+.go-btn {
+  width: 100%; padding: 16px;
+  background: var(--work); color: var(--bg);
+  border: none; border-radius: 12px;
+  font-family: 'Outfit', sans-serif; font-size: 16px; font-weight: 900;
+  letter-spacing: 0.5px; cursor: pointer;
+  transition: opacity .2s, transform .1s;
+}
+.go-btn:hover { opacity: 0.85; }
+.go-btn:active { transform: scale(0.98); }
+
+/* ── MAIN LAYOUT ── */
+#runView { display: none; width: 100%; max-width: 900px; }
+
+.run-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr 1fr;
+  gap: 14px;
+  align-items: start;
+  max-width: 1100px;
+  width: 100%;
+}
+
+/* ── TIMER CARD ── */
+.timer-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 20px; padding: 18px;
+  transition: border-color .4s, box-shadow .4s;
+}
+.timer-card.mode-warmup { border-color: var(--warmup); box-shadow: 0 0 30px rgba(247,201,72,0.08); }
+.timer-card.mode-work   { border-color: var(--work);   box-shadow: 0 0 30px rgba(77,240,160,0.08); }
+.timer-card.mode-record { border-color: var(--record); box-shadow: 0 0 30px rgba(240,77,154,0.1); }
+.timer-card.mode-rest   { border-color: var(--rest);   box-shadow: 0 0 30px rgba(77,168,240,0.08); }
+
+/* Mode badge row */
+.mode-row {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 22px;
+}
+.mode-badge {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 14px; border-radius: 20px;
+  font-size: 12px; font-weight: 700; letter-spacing: 2px;
+  text-transform: uppercase; transition: all .3s;
+}
+.mode-badge .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  animation: modePulse 1.5s ease-in-out infinite;
+}
+@keyframes modePulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.7)} }
+
+.mode-warmup .mode-badge { background: var(--warmup-bg); color: var(--warmup); }
+.mode-warmup .mode-badge .dot { background: var(--warmup); }
+.mode-work   .mode-badge { background: var(--work-bg);   color: var(--work); }
+.mode-work   .mode-badge .dot { background: var(--work); }
+.mode-record .mode-badge { background: var(--record-bg); color: var(--record); }
+.mode-record .mode-badge .dot { background: var(--record); }
+.mode-rest   .mode-badge { background: var(--rest-bg);   color: var(--rest); }
+.mode-rest   .mode-badge .dot { background: var(--rest); }
+
+.session-time { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--muted); }
+
+/* Big clock */
+.clock-area { text-align: center; margin-bottom: 16px; }
+.clock-label { font-size: 10px; letter-spacing: 2px; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; }
+
+.ring-container { position: relative; width: 130px; height: 130px; margin: 0 auto 10px; }
+.ring-container svg { position: absolute; top: 0; left: 0; transform: rotate(-90deg); }
+.ring-bg-circle { fill: none; stroke: var(--border); stroke-width: 6; }
+.ring-fill { fill: none; stroke-width: 6; stroke-linecap: round; transition: stroke-dashoffset 1s linear, stroke .4s; }
+
+.clock-digits {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  font-family: 'JetBrains Mono', monospace; font-size: 26px; font-weight: 700;
+  letter-spacing: -1px; line-height: 1; text-align: center;
+}
+.clock-sub {
+  font-size: 9px; font-family: 'Outfit', sans-serif;
+  color: var(--muted); letter-spacing: 2px; display: block; margin-top: 4px;
+}
+
+.next-bleep {
+  font-size: 12px; color: var(--muted); text-align: center;
+  font-family: 'JetBrains Mono', monospace; margin-top: 6px;
+  min-height: 18px;
+}
+
+/* ── ACTION BUTTON ── */
+.action-btn {
+  width: 100%; padding: 11px;
+  border: none; border-radius: 10px;
+  font-family: 'Outfit', sans-serif; font-size: 13px; font-weight: 900;
+  letter-spacing: 0.3px; cursor: pointer;
+  transition: opacity .2s, transform .15s, background .3s;
+  margin-bottom: 8px;
+}
+.action-btn:hover { opacity: 0.88; }
+.action-btn:active { transform: scale(0.97); }
+
+.mode-warmup .action-btn { background: var(--warmup); color: #0c0800; }
+.mode-work   .action-btn { background: var(--work);   color: #001a0a; }
+.mode-record .action-btn { background: var(--record); color: #1a0008; }
+.mode-rest   .action-btn { background: var(--rest);   color: #00080f; }
+
+/* Sub-controls row */
+.sub-controls { display: flex; gap: 6px; }
+.sub-btn {
+  flex: 1; padding: 7px 4px;
+  background: var(--faint); border: 1px solid var(--border);
+  border-radius: 8px; color: var(--muted);
+  font-family: 'JetBrains Mono', monospace; font-size: 9px; cursor: pointer;
+  transition: all .2s; letter-spacing: 0.3px; text-align: center;
+}
+.sub-btn:hover { border-color: #333345; color: var(--text); background: var(--panel); }
+.sub-btn.danger:hover { border-color: #6b2222; color: #ff8888; }
+
+/* ── ACCUMULATORS ── */
+.accum-row {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px; margin-top: 10px;
+}
+.accum-card {
+  background: var(--faint); border: 1px solid var(--border);
+  border-radius: 8px; padding: 7px;
+  text-align: center; transition: border-color .3s, background .3s;
+}
+.accum-card.active-accum { border-color: currentColor; }
+.accum-label { font-size: 8px; letter-spacing: 1.5px; font-weight: 700; margin-bottom: 3px; text-transform: uppercase; }
+.accum-value { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; }
+.accum-card.w { color: var(--work); }
+.accum-card.w.active-accum { background: var(--work-bg); }
+.accum-card.r { color: var(--record); }
+.accum-card.r.active-accum { background: var(--record-bg); }
+.accum-card.s { color: var(--rest); }
+.accum-card.s.active-accum { background: var(--rest-bg); }
+
+/* ── BLEEP LOG ── */
+.bleep-log {
+  margin-top: 14px;
+  background: var(--faint); border: 1px solid var(--border);
+  border-radius: 12px; padding: 12px;
+  max-height: 88px; overflow-y: auto;
+}
+.bleep-log-title { font-size: 9px; letter-spacing: 2px; color: var(--muted); margin-bottom: 7px; }
+.bleep-entry {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 11px; font-family: 'JetBrains Mono', monospace;
+  color: var(--muted); padding: 2px 0;
+  border-bottom: 1px solid var(--border);
+}
+.bleep-entry:last-child { border-bottom: none; }
+.bleep-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.bleep-log::-webkit-scrollbar { width: 4px; }
+.bleep-log::-webkit-scrollbar-track { background: transparent; }
+.bleep-log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ── RIGHT COLUMN ── */
+.tasks-col { display: flex; flex-direction: column; gap: 14px; }
+.projects-col { display: flex; flex-direction: column; gap: 14px; }
+
+/* Task panel */
+.task-panel {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 18px; padding: 20px;
+}
+.panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 14px;
+}
+.panel-title { font-size: 13px; font-weight: 700; letter-spacing: 0.5px; }
+.task-count {
+  font-size: 10px; color: var(--muted); letter-spacing: 1px;
+  background: var(--faint); padding: 3px 8px; border-radius: 10px;
+}
+
+.task-add-row { display: flex; gap: 8px; margin-bottom: 12px; }
+.task-input {
+  flex: 1; background: var(--faint); border: 1px solid var(--border);
+  border-radius: 8px; color: var(--text); font-family: 'Outfit', sans-serif;
+  font-size: 13px; padding: 8px 12px; outline: none;
+  transition: border-color .2s;
+}
+.task-input:focus { border-color: var(--work); }
+.task-input::placeholder { color: var(--muted); }
+.task-add-btn {
+  background: var(--work); color: var(--bg); border: none;
+  border-radius: 8px; padding: 8px 14px; font-size: 18px; font-weight: 700;
+  cursor: pointer; transition: opacity .2s;
+}
+.task-add-btn:hover { opacity: 0.85; }
+
+.task-list { display: flex; flex-direction: column; gap: 6px; max-height: 380px; overflow-y: auto; }
+.task-list::-webkit-scrollbar { width: 4px; }
+.task-list::-webkit-scrollbar-track { background: transparent; }
+.task-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.task-item {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--faint); border: 1px solid var(--border);
+  border-radius: 8px; padding: 9px 10px;
+  transition: opacity .2s;
+}
+.task-item.done { opacity: 0.4; }
+.task-check {
+  width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--muted);
+  cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  transition: all .2s;
+}
+.task-item.done .task-check { border-color: var(--work); background: var(--work); }
+.task-item.done .task-check::after { content: '✓'; font-size: 9px; color: var(--bg); font-weight: 900; }
+.task-text {
+  flex: 1; font-size: 13px; outline: none; background: transparent;
+  border: none; color: var(--text); font-family: 'Outfit', sans-serif; cursor: text;
+}
+.task-item.done .task-text { text-decoration: line-through; color: var(--muted); }
+.task-del {
+  background: transparent; border: none; color: var(--muted); font-size: 14px;
+  cursor: pointer; padding: 2px 4px; border-radius: 4px; transition: color .2s;
+}
+.task-del:hover { color: #ff6b6b; }
+
+/* Session log panel */
+.session-panel {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 18px; padding: 20px;
+}
+.session-log { display: flex; flex-direction: column; gap: 5px; max-height: 140px; overflow-y: auto; }
+.session-log::-webkit-scrollbar { width: 4px; }
+.session-log::-webkit-scrollbar-track { background: transparent; }
+.session-log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.log-entry {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 11px; font-family: 'JetBrains Mono', monospace;
+  padding: 4px 0; border-bottom: 1px solid var(--border);
+  color: var(--muted);
+}
+.log-entry:last-child { border-bottom: none; }
+.log-badge {
+  font-size: 9px; font-weight: 700; letter-spacing: 1px;
+  padding: 2px 7px; border-radius: 10px;
+}
+
+/* Mode flow indicator */
+.flow-indicator {
+  display: flex; align-items: center; gap: 6px;
+  justify-content: center; margin-top: 6px; flex-wrap: wrap;
+}
+.flow-step {
+  font-size: 10px; font-weight: 700; letter-spacing: 1px;
+  padding: 4px 10px; border-radius: 20px; opacity: 0.4;
+  transition: opacity .3s;
+}
+.flow-step.current { opacity: 1; }
+.flow-arrow { color: var(--muted); font-size: 10px; opacity: 0.4; }
+
+/* End confirm inline */
+.end-confirm {
+  display: none; position: absolute; inset: 0; border-radius: 20px;
+  background: rgba(8,8,16,0.92); backdrop-filter: blur(6px);
+  flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; z-index: 50;
+}
+.end-confirm.show { display: flex; }
+.end-confirm-title { font-family:'Outfit'; font-size:18px; font-weight:700; }
+.end-confirm-sub { font-size:12px; color:var(--muted); letter-spacing:1px; }
+.end-confirm-btns { display:flex; gap:10px; margin-top:6px; }
+.end-confirm-btns button {
+  padding: 11px 28px; border-radius: 10px; border: none;
+  font-family:'Outfit'; font-size:14px; font-weight:700; cursor:pointer;
+  transition: opacity .2s;
+}
+.end-confirm-btns button:hover { opacity: 0.82; }
+.end-yes { background: #ff4444; color: white; }
+.end-no  { background: var(--faint); color: var(--text); border: 1px solid var(--border) !important; }
+
+/* Pause overlay indicator */
+.paused-banner {
+  display: none; text-align: center; font-size: 11px;
+  color: var(--muted); letter-spacing: 2px; margin-bottom: 8px;
+  animation: blink 1.2s step-end infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+.paused-banner.show { display: block; }
+
+/* Project rename button */
+.proj-rename-btn {
+  background: transparent; border: 1px solid transparent;
+  border-radius: 6px; color: var(--muted); font-size: 12px;
+  padding: 2px 6px; cursor: pointer; flex-shrink: 0;
+  transition: color .2s, border-color .2s, background .2s;
+  line-height: 1.4;
+}
+.proj-rename-btn:hover { color: var(--warmup); border-color: var(--warmup); background: rgba(247,201,72,0.08); }
+
+/* Inline rename input (replaces the row when editing) */
+.proj-rename-input {
+  flex: 1; background: var(--faint);
+  border: 1px solid var(--warmup); border-radius: 6px;
+  color: var(--text); font-family: 'Outfit', sans-serif; font-size: 13px;
+  padding: 3px 8px; outline: none;
+}
+
+/* Context tabs (Work / Personal) */
+.context-tabs { display: flex; gap: 6px; }
+.ctx-tab {
+  flex: 1; padding: 7px 10px;
+  background: var(--faint); border: 1px solid var(--border);
+  border-radius: 8px; color: var(--muted);
+  font-family: 'Outfit', sans-serif; font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: all .2s; letter-spacing: 0.3px;
+}
+.ctx-tab:hover { border-color: #3a3a4a; color: var(--text); }
+.ctx-tab.active { background: var(--work-bg); border-color: var(--work); color: var(--work); }
+.ctx-tab--proj.active { background: var(--warmup-bg); border-color: var(--warmup); color: var(--warmup); }
+
+/* Project selected state */
+.task-item.proj-selected {
+  border-color: var(--warmup) !important;
+  background: rgba(247,201,72,0.06);
+}
+.task-item.proj-row { cursor: pointer; }
+.task-item.proj-row:hover { border-color: #3a3a3a; }
+
+/* Notes panel */
+.notes-panel {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 18px; padding: 20px;
+  display: none;
+}
+.notes-panel.visible { display: block; }
+.notes-project-label {
+  font-size: 10px; letter-spacing: 2px; color: var(--warmup);
+  font-weight: 700; margin-bottom: 4px; text-transform: uppercase;
+}
+.notes-project-name {
+  font-size: 14px; font-weight: 700; margin-bottom: 12px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.notes-textarea {
+  width: 100%; min-height: 200px;
+  background: var(--faint); border: 1px solid var(--border);
+  border-radius: 10px; color: var(--text);
+  font-family: 'JetBrains Mono', monospace; font-size: 12px;
+  line-height: 1.7; padding: 12px 14px;
+  resize: vertical; outline: none;
+  transition: border-color .2s;
+}
+.notes-textarea:focus { border-color: var(--warmup); }
+.notes-textarea::placeholder { color: var(--muted); }
+.notes-saved-hint {
+  font-size: 10px; color: var(--muted); letter-spacing: 1px;
+  margin-top: 6px; min-height: 14px; text-align: right;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Scrollbar global */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<!-- ── SETUP ── -->
+<div id="setupView">
+  <div style="text-align:center;margin-bottom:20px">
+    <div style="font-family:'Outfit';font-size:32px;font-weight:900;letter-spacing:-1px">Flow<span style="color:var(--work)">Timer</span></div>
+    <div style="font-size:12px;color:var(--muted);letter-spacing:2px;margin-top:4px">WORK · LOG · REST</div>
+  </div>
+
+  <!-- Persistence bar -->
+  <div id="persistBar" style="display:flex;align-items:center;gap:8px;background:var(--faint);border:1px solid var(--border);border-radius:12px;padding:10px 14px;margin-bottom:20px;flex-wrap:wrap;">
+    <div id="persistStatus" style="flex:1;font-size:11px;color:var(--muted);font-family:'JetBrains Mono';letter-spacing:0.5px">No status file linked</div>
+    <button onclick="loadStatusFile()" style="background:var(--faint);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'Outfit';font-size:12px;font-weight:600;padding:5px 12px;cursor:pointer;transition:all .2s" onmouseover="this.style.borderColor='#555'" onmouseout="this.style.borderColor='var(--border)'">📂 Load</button>
+    <button onclick="saveStatusFile()" id="saveBtn" style="background:var(--faint);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'Outfit';font-size:12px;font-weight:600;padding:5px 12px;cursor:pointer;transition:all .2s" onmouseover="this.style.borderColor='#555'" onmouseout="this.style.borderColor='var(--border)'">💾 Save As</button>
+    <button onclick="newStatusFile()" style="background:var(--faint);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'Outfit';font-size:12px;font-weight:600;padding:5px 12px;cursor:pointer;transition:all .2s" onmouseover="this.style.borderColor='#555'" onmouseout="this.style.borderColor='var(--border)'">✨ New</button>
+  </div>
+
+  <div class="setup-title">Configure your session</div>
+
+  <div class="setup-grid">
+    <div class="field">
+      <div class="color-bar" style="background:var(--warmup)"></div>
+      <label>WARM UP (sec)</label>
+      <input type="number" id="cfgWarmup" value="10" min="0" max="3600">
+      <div class="hint">Then auto-starts Work</div>
+    </div>
+    <div class="field">
+      <div class="color-bar" style="background:var(--work)"></div>
+      <label>WORK BLEEP (min)</label>
+      <input type="number" id="cfgWorkBleep" value="10" min="1" max="60">
+      <div class="hint">Single bleep interval</div>
+    </div>
+    <div class="field">
+      <div class="color-bar" style="background:var(--record)"></div>
+      <label>LOG BLEEP (min)</label>
+      <input type="number" id="cfgRecordBleep" value="2" min="1" max="60">
+      <div class="hint">Double bleep interval</div>
+    </div>
+    <div class="field">
+      <div class="color-bar" style="background:var(--rest)"></div>
+      <label>REST BLEEP (min)</label>
+      <input type="number" id="cfgRestBleep" value="4" min="1" max="60">
+      <div class="hint">Triple bleep interval</div>
+    </div>
+  </div>
+
+  <div style="margin-bottom:20px">
+    <div class="flow-indicator">
+      <div class="flow-step current" style="background:var(--warmup-bg);color:var(--warmup)">WARM UP</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step current" style="background:var(--work-bg);color:var(--work)">WORK</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step current" style="background:var(--record-bg);color:var(--record)">LOG WORK</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step current" style="background:var(--rest-bg);color:var(--rest)">REST</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step current" style="background:var(--work-bg);color:var(--work)">WORK ↺</div>
+    </div>
+  </div>
+
+  <button class="go-btn" onclick="startSession()">START SESSION →</button>
+</div>
+
+<!-- ── RUN VIEW ── -->
+<div id="runView">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;max-width:1100px;width:100%">
+    <div style="font-family:'Outfit';font-size:20px;font-weight:900;letter-spacing:-0.5px">Flow<span style="color:var(--work)">Timer</span></div>
+    <div class="flow-indicator" id="flowIndicator">
+      <div class="flow-step" id="fs-warmup" style="background:var(--warmup-bg);color:var(--warmup)">WARM UP</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step" id="fs-work" style="background:var(--work-bg);color:var(--work)">WORK</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step" id="fs-record" style="background:var(--record-bg);color:var(--record)">LOG WORK</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step" id="fs-rest" style="background:var(--rest-bg);color:var(--rest)">REST</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step" id="fs-work2" style="background:var(--work-bg);color:var(--work)">WORK ↺</div>
+    </div>
+  </div>
+
+  <div class="run-layout">
+    <!-- LEFT: TIMER -->
+    <div class="timer-card mode-warmup" id="timerCard" style="position:relative">
+      <!-- End session confirmation -->
+      <div class="end-confirm" id="endConfirm">
+        <div class="end-confirm-title">End session?</div>
+        <div class="end-confirm-sub">This will return you to setup</div>
+        <div class="end-confirm-btns">
+          <button class="end-no" onclick="cancelEnd()">Keep Going</button>
+          <button class="end-yes" onclick="confirmEnd()">End Session</button>
+        </div>
+      </div>
+
+      <div class="mode-row">
+        <div class="mode-badge" id="modeBadge">
+          <div class="dot"></div>
+          <span id="modeLabel">WARM UP</span>
+        </div>
+        <div class="session-time" id="sessionTime">00:00</div>
+      </div>
+
+      <div class="paused-banner" id="pausedBanner">⏸ PAUSED</div>
+
+      <div class="clock-area">
+        <div class="clock-label" id="clockLabel">ELAPSED</div>
+        <div class="ring-container">
+          <svg width="130" height="130" viewBox="0 0 130 130">
+            <circle class="ring-bg-circle" cx="65" cy="65" r="54"/>
+            <circle class="ring-fill" id="ringFill" cx="65" cy="65" r="54"
+              stroke-dasharray="339" stroke-dashoffset="0" stroke="var(--warmup)"/>
+          </svg>
+          <div class="clock-digits">
+            <span id="clockDigits">00:00</span>
+            <span class="clock-sub" id="clockSub">IN MODE</span>
+          </div>
+        </div>
+        <div class="next-bleep" id="nextBleep"></div>
+      </div>
+
+      <button class="action-btn" id="actionBtn" onclick="handleAction()">
+        ⬤ START LOGGING
+      </button>
+
+      <div class="sub-controls">
+        <button class="sub-btn" onclick="togglePause()" id="pauseBtn">⏸ PAUSE</button>
+        <button class="sub-btn" onclick="resetMode()">↺ RESET MODE</button>
+        <button class="sub-btn danger" onclick="endSession()">■ END</button>
+      </div>
+
+      <!-- Accumulators -->
+      <div class="accum-row">
+        <div class="accum-card w" id="accumWork">
+          <div class="accum-label">Work</div>
+          <div class="accum-value" id="accumWorkVal">00:00</div>
+        </div>
+        <div class="accum-card r" id="accumRecord">
+          <div class="accum-label">Log</div>
+          <div class="accum-value" id="accumRecordVal">00:00</div>
+        </div>
+        <div class="accum-card s" id="accumRest">
+          <div class="accum-label">Rest</div>
+          <div class="accum-value" id="accumRestVal">00:00</div>
+        </div>
+      </div>
+
+      <!-- Bleep log -->
+      <div class="bleep-log" id="bleepLog">
+        <div class="bleep-log-title">BLEEP LOG</div>
+        <div id="bleepEntries"><div style="font-size:11px;color:var(--muted);font-family:'JetBrains Mono'">Waiting for first bleep...</div></div>
+      </div>
+    </div>
+
+    <!-- MIDDLE: TASKS -->
+    <div class="tasks-col">
+      <!-- Tasks -->
+      <div class="task-panel">
+        <div class="panel-header">
+          <div class="panel-title">Tasks</div>
+          <div class="task-count" id="taskCount">0 remaining</div>
+        </div>
+        <!-- Tabs -->
+        <div class="context-tabs" style="margin-bottom:12px">
+          <button class="ctx-tab active" id="taskTabWork"    onclick="setTaskTab('work')">💼 Office</button>
+          <button class="ctx-tab"        id="taskTabPersonal" onclick="setTaskTab('personal')">🏠 Home</button>
+        </div>
+        <!-- Stats -->
+        <div id="taskStats" style="display:none;margin-bottom:14px">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+            <div style="background:var(--faint);border:1px solid var(--border);border-radius:10px;padding:9px;text-align:center">
+              <div style="font-family:'JetBrains Mono';font-size:20px;font-weight:700;color:var(--work)" id="statDone">0</div>
+              <div style="font-size:9px;letter-spacing:1.5px;color:var(--muted);margin-top:3px">DONE</div>
+            </div>
+            <div style="background:var(--faint);border:1px solid var(--border);border-radius:10px;padding:9px;text-align:center">
+              <div style="font-family:'JetBrains Mono';font-size:20px;font-weight:700;color:var(--record)" id="statPending">0</div>
+              <div style="font-size:9px;letter-spacing:1.5px;color:var(--muted);margin-top:3px">PENDING</div>
+            </div>
+            <div style="background:var(--faint);border:1px solid var(--border);border-radius:10px;padding:9px;text-align:center">
+              <div style="font-family:'JetBrains Mono';font-size:20px;font-weight:700;color:var(--text)" id="statTotal">0</div>
+              <div style="font-size:9px;letter-spacing:1.5px;color:var(--muted);margin-top:3px">TOTAL</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+              <div id="taskProgressBar" style="height:100%;background:var(--work);border-radius:3px;transition:width .4s ease;width:0%"></div>
+            </div>
+            <div style="font-family:'JetBrains Mono';font-size:12px;font-weight:700;color:var(--work);min-width:36px;text-align:right" id="statPct">0%</div>
+          </div>
+        </div>
+        <div class="task-add-row">
+          <input type="text" class="task-input" id="taskInput" placeholder="Add a task..." onkeydown="if(event.key==='Enter')addTask()">
+          <button class="task-add-btn" onclick="addTask()">+</button>
+        </div>
+        <div class="task-list" id="taskList">
+          <div style="font-size:12px;color:var(--muted);text-align:center;padding:16px 0">No tasks yet</div>
+        </div>
+      </div>
+
+      <!-- Session log -->
+      <div class="session-panel">
+        <div class="panel-header">
+          <div class="panel-title">Session Log</div>
+        </div>
+        <div class="session-log" id="sessionLog">
+          <div class="log-entry" style="color:var(--muted)">Session started...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: PROJECTS + NOTES -->
+    <div class="projects-col">
+      <!-- Projects -->
+      <div class="task-panel">
+        <div class="panel-header">
+          <div class="panel-title">Projects</div>
+          <div class="task-count" id="projCount">0 remaining</div>
+        </div>
+        <!-- Tabs -->
+        <div class="context-tabs" style="margin-bottom:12px">
+          <button class="ctx-tab ctx-tab--proj active" id="projTabWork"     onclick="setProjTab('work')">💼 Office</button>
+          <button class="ctx-tab ctx-tab--proj"        id="projTabPersonal"  onclick="setProjTab('personal')">🏠 Home</button>
+        </div>
+        <div id="projStats" style="display:none;margin-bottom:14px">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+            <div style="background:var(--faint);border:1px solid var(--border);border-radius:10px;padding:9px;text-align:center">
+              <div style="font-family:'JetBrains Mono';font-size:20px;font-weight:700;color:var(--warmup)" id="projStatDone">0</div>
+              <div style="font-size:9px;letter-spacing:1.5px;color:var(--muted);margin-top:3px">DONE</div>
+            </div>
+            <div style="background:var(--faint);border:1px solid var(--border);border-radius:10px;padding:9px;text-align:center">
+              <div style="font-family:'JetBrains Mono';font-size:20px;font-weight:700;color:var(--record)" id="projStatPending">0</div>
+              <div style="font-size:9px;letter-spacing:1.5px;color:var(--muted);margin-top:3px">PENDING</div>
+            </div>
+            <div style="background:var(--faint);border:1px solid var(--border);border-radius:10px;padding:9px;text-align:center">
+              <div style="font-family:'JetBrains Mono';font-size:20px;font-weight:700;color:var(--text)" id="projStatTotal">0</div>
+              <div style="font-size:9px;letter-spacing:1.5px;color:var(--muted);margin-top:3px">TOTAL</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+              <div id="projProgressBar" style="height:100%;background:var(--warmup);border-radius:3px;transition:width .4s ease;width:0%"></div>
+            </div>
+            <div style="font-family:'JetBrains Mono';font-size:12px;font-weight:700;color:var(--warmup);min-width:36px;text-align:right" id="projStatPct">0%</div>
+          </div>
+        </div>
+        <div class="task-add-row">
+          <input type="text" class="task-input" id="projInput" placeholder="Add a project..." onkeydown="if(event.key==='Enter')addProject()">
+          <button class="task-add-btn" style="background:var(--warmup)" onclick="addProject()">+</button>
+        </div>
+        <div class="task-list" id="projList">
+          <div style="font-size:12px;color:var(--muted);text-align:center;padding:16px 0">No projects yet</div>
+        </div>
+      </div>
+
+      <!-- Project Notes -->
+      <div class="notes-panel" id="notesPanel">
+        <div class="notes-project-label">Project Notes</div>
+        <div class="notes-project-name" id="notesProjName">—</div>
+        <textarea class="notes-textarea" id="notesTextarea"
+          placeholder="Type notes for this project..."
+          oninput="saveNotes()"></textarea>
+        <div class="notes-saved-hint" id="notesSavedHint"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── CONFIG (populated at start) ──
+let CFG = { warmupMins: 5, workBleep: 10, recordBleep: 2, restBleep: 4 };
+
+// ── STATE ──
+let mode = 'warmup'; // warmup | work | record | rest
+let paused = false;
+let modeSeconds = 0;       // seconds in current mode
+let sessionSeconds = 0;    // total session seconds
+let accumWork = 0, accumRecord = 0, accumRest = 0;
+let bleepClock = 0;        // seconds since last bleep in current mode
+let mainInterval = null;
+let bleepLogEntries = [];
+let taskData = { work: [], personal: [] };
+let projData  = { work: [], personal: [] };
+let taskTab = 'work';
+let projTab = 'work';
+let selectedProject = { work: null, personal: null };
+let sessionLogEntries = [];
+let cycleNum = 1;
+
+// ── MODE CONFIG ──
+const MODES = {
+  warmup: {
+    color: 'var(--warmup)', label: 'WARM UP', class: 'mode-warmup',
+    actionLabel: null, // auto-transitions
+    clockLabel: 'ELAPSED',
+    sub: 'WARMING UP'
+  },
+  work: {
+    color: 'var(--work)', label: 'WORK', class: 'mode-work',
+    actionLabel: '⬤ START LOGGING',
+    clockLabel: 'IN WORK',
+    sub: 'WORKING'
+  },
+  record: {
+    color: 'var(--record)', label: 'LOG WORK', class: 'mode-record',
+    actionLabel: '◼ FINISH LOGGING → REST',
+    clockLabel: 'IN LOG',
+    sub: 'LOGGING'
+  },
+  rest: {
+    color: 'var(--rest)', label: 'REST', class: 'mode-rest',
+    actionLabel: '▶ BACK TO WORK',
+    clockLabel: 'IN REST',
+    sub: 'RESTING'
+  }
+};
+
+function startSession() {
+  CFG.warmupMins   = +document.getElementById('cfgWarmup').value || 10;
+  CFG.workBleep    = +document.getElementById('cfgWorkBleep').value || 10;
+  CFG.recordBleep  = +document.getElementById('cfgRecordBleep').value || 2;
+  CFG.restBleep    = +document.getElementById('cfgRestBleep').value || 4;
+
+  document.getElementById('setupView').style.display = 'none';
+  document.getElementById('runView').style.display = 'block';
+
+  mode = 'warmup'; modeSeconds = 0; sessionSeconds = 0;
+  accumWork = accumRecord = accumRest = 0;
+  bleepClock = 0; bleepLogEntries = []; sessionLogEntries = []; cycleNum = 1;
+  paused = false;
+
+  addSessionLog('warmup', 'Warm up started');
+  updateUI();
+  mainInterval = setInterval(tick, 1000);
+}
+
+function tick() {
+  if (paused) return;
+  modeSeconds++;
+  sessionSeconds++;
+  bleepClock++;
+
+  // Accumulate
+  if (mode === 'work')   accumWork++;
+  if (mode === 'record') accumRecord++;
+  if (mode === 'rest')   accumRest++;
+
+  // Warm up auto-transition
+  if (mode === 'warmup' && modeSeconds >= CFG.warmupMins) {
+    switchMode('work');
+    return;
+  }
+
+  // Bleep intervals
+  if (mode === 'work'   && bleepClock >= CFG.workBleep   * 60) { bleep(1); bleepClock = 0; addBleepLog('work',   1); }
+  if (mode === 'record' && bleepClock >= CFG.recordBleep * 60) { bleep(2); bleepClock = 0; addBleepLog('record', 2); }
+  if (mode === 'rest'   && bleepClock >= CFG.restBleep   * 60) { bleep(3); bleepClock = 0; addBleepLog('rest',   3); }
+
+  updateUI();
+}
+
+function switchMode(newMode) {
+  const prev = mode;
+  mode = newMode;
+  modeSeconds = 0;
+  bleepClock = 0;
+  paused = false;
+  document.getElementById('pauseBtn').textContent = '⏸ PAUSE';
+  document.getElementById('pausedBanner').classList.remove('show');
+
+  const labels = { work: 'Work mode started', record: 'Log started', rest: 'Rest started' };
+  if (newMode === 'work' && prev !== 'warmup') addSessionLog('work', `Work started (cycle ${cycleNum})`);
+  else if (newMode === 'work') addSessionLog('work', 'Work started');
+  else addSessionLog(newMode, labels[newMode]);
+
+  if (newMode === 'work' && prev === 'rest') cycleNum++;
+  bleep(newMode === 'work' ? 1 : newMode === 'record' ? 2 : 3);
+  updateUI();
+}
+
+function handleAction() {
+  if (mode === 'warmup') return;
+  if (mode === 'work')   { switchMode('record'); return; }
+  if (mode === 'record') { switchMode('rest');   return; }
+  if (mode === 'rest')   { switchMode('work');   return; }
+}
+
+function togglePause() {
+  paused = !paused;
+  document.getElementById('pauseBtn').textContent = paused ? '▶ RESUME' : '⏸ PAUSE';
+  document.getElementById('pausedBanner').classList.toggle('show', paused);
+  if (paused) addSessionLog(mode, 'Paused');
+  else addSessionLog(mode, 'Resumed');
+}
+
+function resetMode() {
+  modeSeconds = 0; bleepClock = 0;
+  updateUI();
+}
+
+function endSession() {
+  document.getElementById('endConfirm').classList.add('show');
+}
+function cancelEnd() {
+  document.getElementById('endConfirm').classList.remove('show');
+}
+function confirmEnd() {
+  clearInterval(mainInterval);
+  document.getElementById('endConfirm').classList.remove('show');
+  document.getElementById('setupView').style.display = 'block';
+  document.getElementById('runView').style.display = 'none';
+}
+
+// ── UI UPDATE ──
+function updateUI() {
+  const m = MODES[mode];
+  const card = document.getElementById('timerCard');
+
+  // Card class
+  card.className = 'timer-card ' + m.class;
+
+  // Mode badge
+  document.getElementById('modeLabel').textContent = m.label;
+  document.getElementById('modeBadge').style.cssText = '';
+
+  // Session time
+  document.getElementById('sessionTime').textContent = fmt(sessionSeconds);
+
+  // Clock
+  document.getElementById('clockLabel').textContent = m.clockLabel;
+  document.getElementById('clockDigits').textContent = fmt(modeSeconds);
+  document.getElementById('clockSub').textContent = m.sub;
+
+  // Ring
+  const ring = document.getElementById('ringFill');
+  ring.style.stroke = m.color;
+  let ringPct = 0;
+  if (mode === 'warmup') {
+    const total = CFG.warmupMins || 1;
+    ringPct = Math.min(modeSeconds / total, 1);
+  } else {
+    const interval = (mode === 'work' ? CFG.workBleep : mode === 'record' ? CFG.recordBleep : CFG.restBleep) * 60;
+    ringPct = bleepClock / interval;
+  }
+  ring.style.strokeDashoffset = 339 * (1 - ringPct);
+
+  // Next bleep
+  const nb = document.getElementById('nextBleep');
+  if (mode === 'warmup') {
+    const rem = CFG.warmupMins - modeSeconds;
+    nb.textContent = rem > 0 ? `→ work in ${fmt(rem)}` : '';
+  } else {
+    const interval = (mode === 'work' ? CFG.workBleep : mode === 'record' ? CFG.recordBleep : CFG.restBleep) * 60;
+    const rem = interval - bleepClock;
+    const bleepChar = mode === 'work' ? '•' : mode === 'record' ? '••' : '•••';
+    nb.textContent = `${bleepChar} next in ${fmt(rem)}`;
+  }
+
+  // Action button
+  const btn = document.getElementById('actionBtn');
+  if (mode === 'warmup') {
+    btn.textContent = '⏳ WARMING UP...';
+    btn.style.opacity = '0.4';
+    btn.style.cursor = 'default';
+    btn.disabled = true;
+  } else {
+    btn.textContent = m.actionLabel;
+    btn.style.opacity = '';
+    btn.style.cursor = '';
+    btn.disabled = false;
+  }
+
+  // Flow indicator
+  ['warmup','work','record','rest','work2'].forEach(id => {
+    document.getElementById('fs-'+id)?.classList.remove('current');
+  });
+  if (mode === 'warmup') document.getElementById('fs-warmup').classList.add('current');
+  else if (mode === 'work') {
+    document.getElementById('fs-work').classList.add('current');
+    document.getElementById('fs-work2').classList.add('current');
+  }
+  else if (mode === 'record') document.getElementById('fs-record').classList.add('current');
+  else if (mode === 'rest')   document.getElementById('fs-rest').classList.add('current');
+
+  // Accumulators
+  document.getElementById('accumWorkVal').textContent   = fmt(accumWork);
+  document.getElementById('accumRecordVal').textContent = fmt(accumRecord);
+  document.getElementById('accumRestVal').textContent   = fmt(accumRest);
+
+  ['accumWork','accumRecord','accumRest'].forEach(id => document.getElementById(id).classList.remove('active-accum'));
+  if (mode === 'work')   document.getElementById('accumWork').classList.add('active-accum');
+  if (mode === 'record') document.getElementById('accumRecord').classList.add('active-accum');
+  if (mode === 'rest')   document.getElementById('accumRest').classList.add('active-accum');
+}
+
+// ── TASKS ──
+function setTaskTab(tab) {
+  taskTab = tab;
+  document.getElementById('taskTabWork').classList.toggle('active', tab === 'work');
+  document.getElementById('taskTabPersonal').classList.toggle('active', tab === 'personal');
+  renderTasks();
+}
+
+function renderTasks() {
+  const tasks = taskData[taskTab];
+  const list = document.getElementById('taskList');
+  const done = tasks.filter(t => t.done).length;
+  const total = tasks.length;
+  const pending = total - done;
+  const pct = total ? Math.round(done / total * 100) : 0;
+
+  document.getElementById('taskCount').textContent = `${pending} remaining`;
+  const statsEl = document.getElementById('taskStats');
+  statsEl.style.display = total ? 'block' : 'none';
+  document.getElementById('statDone').textContent    = done;
+  document.getElementById('statPending').textContent = pending;
+  document.getElementById('statTotal').textContent   = total;
+  document.getElementById('statPct').textContent     = pct + '%';
+  document.getElementById('taskProgressBar').style.width = pct + '%';
+
+  if (!tasks.length) {
+    list.innerHTML = `<div style="font-size:12px;color:var(--muted);text-align:center;padding:16px 0">No ${taskTab} tasks yet</div>`;
+    return;
+  }
+  list.innerHTML = tasks.map((t, i) => `
+    <div class="task-item ${t.done ? 'done' : ''}">
+      <div class="task-check" onclick="toggleTask(${i})"></div>
+      <div class="task-text" contenteditable="true"
+        onblur="taskData['${taskTab}'][${i}].text=this.textContent.trim();scheduleAutoSave()"
+        onfocus="this.style.color='var(--text)'"
+        spellcheck="false">${t.text}</div>
+      <button class="task-del" onclick="deleteTask(${i})">✕</button>
+    </div>
+  `).join('');
+}
+
+function addTask() {
+  const inp = document.getElementById('taskInput');
+  const val = inp.value.trim();
+  if (!val) return;
+  taskData[taskTab].push({ text: val, done: false });
+  inp.value = '';
+  renderTasks();
+  scheduleAutoSave();
+}
+
+function toggleTask(i) {
+  taskData[taskTab][i].done = !taskData[taskTab][i].done;
+  renderTasks(); scheduleAutoSave();
+}
+function deleteTask(i) {
+  taskData[taskTab].splice(i, 1);
+  renderTasks(); scheduleAutoSave();
+}
+
+// ── PROJECTS ──
+function setProjTab(tab) {
+  projTab = tab;
+  document.getElementById('projTabWork').classList.toggle('active', tab === 'work');
+  document.getElementById('projTabPersonal').classList.toggle('active', tab === 'personal');
+  renderProjects();
+  const sel = selectedProject[projTab];
+  if (sel !== null) updateNotesPanel(sel);
+  else document.getElementById('notesPanel').classList.remove('visible');
+}
+
+function renderProjects() {
+  const projects = projData[projTab];
+  const list = document.getElementById('projList');
+  const done = projects.filter(p => p.done).length;
+  const total = projects.length;
+  const pending = total - done;
+  const pct = total ? Math.round(done / total * 100) : 0;
+
+  document.getElementById('projCount').textContent = `${pending} remaining`;
+  const statsEl = document.getElementById('projStats');
+  statsEl.style.display = total ? 'block' : 'none';
+  document.getElementById('projStatDone').textContent    = done;
+  document.getElementById('projStatPending').textContent = pending;
+  document.getElementById('projStatTotal').textContent   = total;
+  document.getElementById('projStatPct').textContent     = pct + '%';
+  document.getElementById('projProgressBar').style.width = pct + '%';
+
+  // Clamp selection
+  const sel = selectedProject[projTab];
+  if (sel !== null && sel >= projects.length) {
+    selectedProject[projTab] = projects.length ? projects.length - 1 : null;
+  }
+  const curSel = selectedProject[projTab];
+
+  if (!projects.length) {
+    list.innerHTML = `<div style="font-size:12px;color:var(--muted);text-align:center;padding:16px 0">No ${projTab} projects yet</div>`;
+    document.getElementById('notesPanel').classList.remove('visible');
+    return;
+  }
+
+  list.innerHTML = projects.map((p, i) => `
+    <div class="task-item proj-row ${p.done ? 'done' : ''} ${i === curSel ? 'proj-selected' : ''}"
+         id="projRow${i}" onclick="selectProject(${i})">
+      <div class="task-check"
+        style="${p.done ? 'border-color:var(--warmup);background:var(--warmup)' : 'border-color:var(--warmup)'}"
+        onclick="event.stopPropagation();toggleProject(${i})">
+        ${p.done ? '<span style="font-size:9px;color:var(--bg);font-weight:900">✓</span>' : ''}
+      </div>
+      <span class="task-text" style="pointer-events:none;user-select:none">${p.text}</span>
+      <button class="proj-rename-btn" title="Rename" onclick="event.stopPropagation();startRenameProject(${i})">✏</button>
+      <button class="task-del" onclick="event.stopPropagation();deleteProject(${i})">✕</button>
+    </div>
+  `).join('');
+
+  if (curSel !== null) updateNotesPanel(curSel);
+}
+
+function selectProject(i) {
+  selectedProject[projTab] = i;
+  renderProjects();
+  updateNotesPanel(i);
+}
+
+function startRenameProject(i) {
+  const row = document.getElementById('projRow' + i);
+  if (!row) return;
+  const label = row.querySelector('.task-text');
+  const renameBtn = row.querySelector('.proj-rename-btn');
+  const input = document.createElement('input');
+  input.className = 'proj-rename-input';
+  input.value = projData[projTab][i].text;
+  input.spellcheck = false;
+  row.onclick = null;
+  renameBtn.style.display = 'none';
+  label.replaceWith(input);
+  input.focus(); input.select();
+
+  const commit = () => {
+    const val = input.value.trim();
+    if (val) { projData[projTab][i].text = val; scheduleAutoSave(); }
+    renderProjects();
+    if (selectedProject[projTab] === i) updateNotesPanel(i);
+  };
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter')  { input.blur(); }
+    if (e.key === 'Escape') { input.value = projData[projTab][i].text; input.blur(); }
+    e.stopPropagation();
+  });
+  input.addEventListener('click', e => e.stopPropagation());
+}
+
+function updateNotesPanel(i) {
+  const p = projData[projTab][i];
+  if (!p) return;
+  const label = projTab === 'work' ? '💼 Office Project' : '🏠 Home Project';
+  document.getElementById('notesPanel').classList.add('visible');
+  document.getElementById('notesProjName').textContent = p.text || 'Untitled project';
+  document.querySelector('.notes-project-label').textContent = label + ' · Notes';
+  const ta = document.getElementById('notesTextarea');
+  if (document.activeElement !== ta) ta.value = p.notes || '';
+  document.getElementById('notesSavedHint').textContent = '';
+}
+
+let notesSaveTimer = null;
+function saveNotes() {
+  const sel = selectedProject[projTab];
+  if (sel === null || !projData[projTab][sel]) return;
+  projData[projTab][sel].notes = document.getElementById('notesTextarea').value;
+  clearTimeout(notesSaveTimer);
+  notesSaveTimer = setTimeout(() => {
+    document.getElementById('notesSavedHint').textContent = 'saved ✓';
+    setTimeout(() => { document.getElementById('notesSavedHint').textContent = ''; }, 2000);
+    scheduleAutoSave();
+  }, 600);
+}
+
+function addProject() {
+  const inp = document.getElementById('projInput');
+  const val = inp.value.trim();
+  if (!val) return;
+  projData[projTab].push({ text: val, done: false, notes: '' });
+  selectedProject[projTab] = projData[projTab].length - 1;
+  inp.value = '';
+  renderProjects();
+  scheduleAutoSave();
+}
+
+function toggleProject(i) {
+  projData[projTab][i].done = !projData[projTab][i].done;
+  renderProjects(); scheduleAutoSave();
+}
+function deleteProject(i) {
+  projData[projTab].splice(i, 1);
+  renderProjects(); scheduleAutoSave();
+}
+
+// ── SESSION LOG ──
+const LOG_COLORS = { warmup: 'var(--warmup)', work: 'var(--work)', record: 'var(--record)', rest: 'var(--rest)' };
+const LOG_LABELS = { warmup: 'WARM', work: 'WORK', record: 'LOG', rest: 'REST' };
+
+function addSessionLog(modeKey, text) {
+  sessionLogEntries.unshift({ mode: modeKey, text, time: fmt(sessionSeconds) });
+  const log = document.getElementById('sessionLog');
+  log.innerHTML = sessionLogEntries.map(e => `
+    <div class="log-entry">
+      <span class="log-badge" style="background:${LOG_COLORS[e.mode]}22;color:${LOG_COLORS[e.mode]}">${LOG_LABELS[e.mode]}</span>
+      <span style="flex:1">${e.text}</span>
+      <span style="color:var(--muted)">${e.time}</span>
+    </div>
+  `).join('');
+}
+
+// ── BLEEP LOG ──
+function addBleepLog(modeKey, count) {
+  const t = fmt(sessionSeconds);
+  const dots = '•'.repeat(count);
+  bleepLogEntries.unshift({ modeKey, dots, t });
+  const container = document.getElementById('bleepEntries');
+  container.innerHTML = bleepLogEntries.map(e => `
+    <div class="bleep-entry">
+      <div class="bleep-dot" style="background:${LOG_COLORS[e.modeKey]}"></div>
+      <span style="color:${LOG_COLORS[e.modeKey]};font-size:13px">${e.dots}</span>
+      <span style="flex:1;font-size:10px">${LOG_LABELS[e.modeKey]}</span>
+      <span>${e.t}</span>
+    </div>
+  `).join('');
+}
+
+// ── BLEEP SOUND ──
+function bleep(count) {
+  const gap = 180;
+  for (let i = 0; i < count; i++) {
+    setTimeout(() => playBeep(), i * gap);
+  }
+}
+
+function playBeep(freq = 880, dur = 0.12) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.25, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+    osc.start(); osc.stop(ctx.currentTime + dur);
+  } catch(e) {}
+}
+
+// ── UTILS ──
+function fmt(secs) {
+  const m = Math.floor(secs/60), s = secs%60;
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+// ── PERSISTENCE (File System Access API) ──
+let fileHandle = null;
+let autoSaveTimer = null;
+
+function buildStatusPayload() {
+  return {
+    version: 2,
+    savedAt: new Date().toISOString(),
+    taskData: taskData,
+    projData: projData,
+    summary: {
+      tasks: {
+        work:     { total: taskData.work.length,     done: taskData.work.filter(t=>t.done).length },
+        personal: { total: taskData.personal.length, done: taskData.personal.filter(t=>t.done).length }
+      },
+      projects: {
+        work:     { total: projData.work.length,     done: projData.work.filter(p=>p.done).length },
+        personal: { total: projData.personal.length, done: projData.personal.filter(p=>p.done).length }
+      }
+    }
+  };
+}
+
+function applyStatusPayload(data) {
+  // Support v2 (tabbed) and v1 (legacy flat) formats
+  if (data.taskData) {
+    taskData.work     = (data.taskData.work     || []).map(t => ({ notes: '', ...t }));
+    taskData.personal = (data.taskData.personal || []).map(t => ({ notes: '', ...t }));
+  } else if (Array.isArray(data.tasks)) {
+    taskData.work = data.tasks.map(t => ({ notes: '', ...t }));
+  }
+  if (data.projData) {
+    projData.work     = (data.projData.work     || []).map(p => ({ notes: '', ...p }));
+    projData.personal = (data.projData.personal || []).map(p => ({ notes: '', ...p }));
+  } else if (Array.isArray(data.projects)) {
+    projData.work = data.projects.map(p => ({ notes: '', ...p }));
+  }
+  selectedProject = { work: projData.work.length ? 0 : null, personal: projData.personal.length ? 0 : null };
+  renderTasks();
+  renderProjects();
+  const sel = selectedProject[projTab];
+  if (sel !== null) updateNotesPanel(sel);
+}
+
+function setPersistStatus(msg, color) {
+  const el = document.getElementById('persistStatus');
+  if (el) { el.textContent = msg; el.style.color = color || 'var(--muted)'; }
+}
+
+// Load from an existing JSON file
+async function loadStatusFile() {
+  if (!window.showOpenFilePicker) { alert('File System Access API not supported in this browser.\nUse Chrome or Edge on desktop.'); return; }
+  try {
+    const [handle] = await window.showOpenFilePicker({
+      types: [{ description: 'FlowTimer Status', accept: { 'application/json': ['.json'] } }],
+      multiple: false
+    });
+    fileHandle = handle;
+    const file = await handle.getFile();
+    const text = await file.text();
+    const data = JSON.parse(text);
+    applyStatusPayload(data);
+    const saved = data.savedAt ? new Date(data.savedAt).toLocaleString() : 'unknown';
+    setPersistStatus(`📄 ${handle.name}  ·  last saved ${saved}`, 'var(--work)');
+    document.getElementById('saveBtn').textContent = '💾 Save';
+    scheduleAutoSave();
+  } catch(e) {
+    if (e.name !== 'AbortError') setPersistStatus('⚠ Could not load file', '#ff8888');
+  }
+}
+
+// Save As — pick location and filename
+async function saveStatusFile() {
+  if (!window.showSaveFilePicker) {
+    // Fallback: download the JSON
+    downloadStatusFile();
+    return;
+  }
+  try {
+    const handle = await window.showSaveFilePicker({
+      suggestedName: 'flowtimer_status.json',
+      types: [{ description: 'FlowTimer Status', accept: { 'application/json': ['.json'] } }]
+    });
+    fileHandle = handle;
+    await writeToHandle(handle);
+    setPersistStatus(`📄 ${handle.name}  ·  saved just now`, 'var(--work)');
+    document.getElementById('saveBtn').textContent = '💾 Save';
+    scheduleAutoSave();
+  } catch(e) {
+    if (e.name !== 'AbortError') setPersistStatus('⚠ Could not save file', '#ff8888');
+  }
+}
+
+// Create a brand-new status (clears current)
+function newStatusFile() {
+  tasks = []; projects = [];
+  fileHandle = null;
+  renderTasks(); renderProjects();
+  clearTimeout(autoSaveTimer);
+  setPersistStatus('New session — no file linked yet', 'var(--muted)');
+  document.getElementById('saveBtn').textContent = '💾 Save As';
+}
+
+async function writeToHandle(handle) {
+  const writable = await handle.createWritable();
+  await writable.write(JSON.stringify(buildStatusPayload(), null, 2));
+  await writable.close();
+}
+
+// Silent auto-save whenever tasks or projects change
+function scheduleAutoSave() {
+  if (!fileHandle) return;
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(async () => {
+    try {
+      await writeToHandle(fileHandle);
+      const now = new Date().toLocaleTimeString();
+      setPersistStatus(`📄 ${fileHandle.name}  ·  auto-saved ${now}`, 'var(--work)');
+    } catch(e) {
+      setPersistStatus('⚠ Auto-save failed — check file permissions', '#ff8888');
+    }
+  }, 800); // debounce 800ms
+}
+
+// Fallback download for browsers without File System Access API
+function downloadStatusFile() {
+  const blob = new Blob([JSON.stringify(buildStatusPayload(), null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'flowtimer_status.json';
+  a.click();
+  setPersistStatus('📥 Downloaded flowtimer_status.json', 'var(--warmup)');
+}
+
+// Also save when task/project text is edited inline (blur events already update the array)
+document.addEventListener('focusout', e => {
+  if (e.target.classList.contains('task-text')) scheduleAutoSave();
+});
+</script>
+</body>
+</html>
