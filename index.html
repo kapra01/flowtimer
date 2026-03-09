@@ -447,12 +447,53 @@ body {
     <div style="font-size:12px;color:var(--muted);letter-spacing:2px;margin-top:4px">WORK · LOG · REST</div>
   </div>
 
-  <!-- Persistence bar -->
-  <div id="persistBar" style="display:flex;align-items:center;gap:8px;background:var(--faint);border:1px solid var(--border);border-radius:12px;padding:10px 14px;margin-bottom:20px;flex-wrap:wrap;">
-    <div id="persistStatus" style="flex:1;font-size:11px;color:var(--muted);font-family:'JetBrains Mono';letter-spacing:0.5px">No status file linked</div>
-    <button onclick="loadStatusFile()" style="background:var(--faint);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'Outfit';font-size:12px;font-weight:600;padding:5px 12px;cursor:pointer;transition:all .2s" onmouseover="this.style.borderColor='#555'" onmouseout="this.style.borderColor='var(--border)'">📂 Load</button>
-    <button onclick="saveStatusFile()" id="saveBtn" style="background:var(--faint);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'Outfit';font-size:12px;font-weight:600;padding:5px 12px;cursor:pointer;transition:all .2s" onmouseover="this.style.borderColor='#555'" onmouseout="this.style.borderColor='var(--border)'">💾 Save As</button>
-    <button onclick="newStatusFile()" style="background:var(--faint);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'Outfit';font-size:12px;font-weight:600;padding:5px 12px;cursor:pointer;transition:all .2s" onmouseover="this.style.borderColor='#555'" onmouseout="this.style.borderColor='var(--border)'">✨ New</button>
+  <!-- Gist Sync panel -->
+  <div id="syncPanel" style="background:var(--faint);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:20px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="font-size:12px;font-weight:700;letter-spacing:1px;color:var(--text)">☁ GitHub Gist Sync</div>
+      <button onclick="toggleSyncSetup()" id="syncToggleBtn"
+        style="background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:11px;padding:3px 10px;cursor:pointer;font-family:'Outfit'">
+        ⚙ Setup
+      </button>
+    </div>
+
+    <!-- Setup fields (collapsed by default once configured) -->
+    <div id="syncSetupFields">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">
+        Paste your GitHub personal access token (gist scope). The Gist ID is auto-filled after first save.
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px">
+        <div style="display:flex;gap:8px;align-items:center">
+          <label style="font-size:10px;letter-spacing:1px;color:var(--muted);width:70px;flex-shrink:0">TOKEN</label>
+          <input type="password" id="ghToken" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+            style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'JetBrains Mono';font-size:12px;padding:7px 10px;outline:none"
+            oninput="saveGistConfig()">
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <label style="font-size:10px;letter-spacing:1px;color:var(--muted);width:70px;flex-shrink:0">GIST ID</label>
+          <input type="text" id="ghGistId" placeholder="Auto-filled on first save"
+            style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'JetBrains Mono';font-size:12px;padding:7px 10px;outline:none"
+            oninput="saveGistConfig()">
+        </div>
+      </div>
+    </div>
+
+    <!-- Status + action buttons -->
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <div id="syncStatus" style="flex:1;font-size:11px;color:var(--muted);font-family:'JetBrains Mono'">Not configured</div>
+      <button onclick="gistLoad()" id="gistLoadBtn"
+        style="background:var(--faint);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'Outfit';font-size:12px;font-weight:600;padding:5px 12px;cursor:pointer">
+        ☁ Load
+      </button>
+      <button onclick="gistSave()" id="gistSaveBtn"
+        style="background:var(--work);border:none;border-radius:8px;color:var(--bg);font-family:'Outfit';font-size:12px;font-weight:700;padding:5px 12px;cursor:pointer">
+        ☁ Save
+      </button>
+      <button onclick="clearSyncData()"
+        style="background:var(--faint);border:1px solid var(--border);border-radius:8px;color:var(--muted);font-family:'Outfit';font-size:12px;font-weight:600;padding:5px 12px;cursor:pointer">
+        ✕ Clear
+      </button>
+    </div>
   </div>
 
   <div class="setup-title">Configure your session</div>
@@ -1188,16 +1229,16 @@ function fmt(secs) {
   return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
 
-// ── PERSISTENCE (File System Access API) ──
-let fileHandle = null;
+// ── GIST SYNC ──
+const GIST_FILENAME = 'flowtimer_status.json';
 let autoSaveTimer = null;
 
 function buildStatusPayload() {
   return {
     version: 2,
     savedAt: new Date().toISOString(),
-    taskData: taskData,
-    projData: projData,
+    taskData,
+    projData,
     summary: {
       tasks: {
         work:     { total: taskData.work.length,     done: taskData.work.filter(t=>t.done).length },
@@ -1212,120 +1253,156 @@ function buildStatusPayload() {
 }
 
 function applyStatusPayload(data) {
-  // Support v2 (tabbed) and v1 (legacy flat) formats
   if (data.taskData) {
-    taskData.work     = (data.taskData.work     || []).map(t => ({ notes: '', ...t }));
-    taskData.personal = (data.taskData.personal || []).map(t => ({ notes: '', ...t }));
+    taskData.work     = (data.taskData.work     || []).map(t => ({ notes:'', ...t }));
+    taskData.personal = (data.taskData.personal || []).map(t => ({ notes:'', ...t }));
   } else if (Array.isArray(data.tasks)) {
-    taskData.work = data.tasks.map(t => ({ notes: '', ...t }));
+    taskData.work = data.tasks.map(t => ({ notes:'', ...t }));
   }
   if (data.projData) {
-    projData.work     = (data.projData.work     || []).map(p => ({ notes: '', ...p }));
-    projData.personal = (data.projData.personal || []).map(p => ({ notes: '', ...p }));
+    projData.work     = (data.projData.work     || []).map(p => ({ notes:'', ...p }));
+    projData.personal = (data.projData.personal || []).map(p => ({ notes:'', ...p }));
   } else if (Array.isArray(data.projects)) {
-    projData.work = data.projects.map(p => ({ notes: '', ...p }));
+    projData.work = data.projects.map(p => ({ notes:'', ...p }));
   }
-  selectedProject = { work: projData.work.length ? 0 : null, personal: projData.personal.length ? 0 : null };
-  renderTasks();
-  renderProjects();
+  selectedProject = {
+    work:     projData.work.length     ? 0 : null,
+    personal: projData.personal.length ? 0 : null
+  };
+  renderTasks(); renderProjects();
   const sel = selectedProject[projTab];
   if (sel !== null) updateNotesPanel(sel);
 }
 
-function setPersistStatus(msg, color) {
-  const el = document.getElementById('persistStatus');
-  if (el) { el.textContent = msg; el.style.color = color || 'var(--muted)'; }
+// ── localStorage config ──
+function loadGistConfig() {
+  const token  = localStorage.getItem('ft_gh_token')  || '';
+  const gistId = localStorage.getItem('ft_gist_id')   || '';
+  document.getElementById('ghToken').value  = token;
+  document.getElementById('ghGistId').value = gistId;
+  updateSyncStatus();
+  // Collapse setup if already configured
+  if (token) document.getElementById('syncSetupFields').style.display = 'none';
 }
 
-// Load from an existing JSON file
-async function loadStatusFile() {
-  if (!window.showOpenFilePicker) { alert('File System Access API not supported in this browser.\nUse Chrome or Edge on desktop.'); return; }
+function saveGistConfig() {
+  const token  = document.getElementById('ghToken').value.trim();
+  const gistId = document.getElementById('ghGistId').value.trim();
+  if (token)  localStorage.setItem('ft_gh_token',  token);
+  else        localStorage.removeItem('ft_gh_token');
+  if (gistId) localStorage.setItem('ft_gist_id',   gistId);
+  else        localStorage.removeItem('ft_gist_id');
+  updateSyncStatus();
+}
+
+function updateSyncStatus(msg, color) {
+  const token  = localStorage.getItem('ft_gh_token');
+  const gistId = localStorage.getItem('ft_gist_id');
+  const el = document.getElementById('syncStatus');
+  if (msg) { el.textContent = msg; el.style.color = color || 'var(--muted)'; return; }
+  if (!token)  { el.textContent = '⚠ No token — enter one above'; el.style.color = '#ff8888'; return; }
+  if (!gistId) { el.textContent = '✓ Token set · no Gist yet — click Save'; el.style.color = 'var(--warmup)'; return; }
+  el.textContent = `✓ Gist: ${gistId.slice(0,10)}…`; el.style.color = 'var(--work)';
+}
+
+function toggleSyncSetup() {
+  const fields = document.getElementById('syncSetupFields');
+  const shown  = fields.style.display !== 'none';
+  fields.style.display = shown ? 'none' : 'block';
+  document.getElementById('syncToggleBtn').textContent = shown ? '⚙ Setup' : '✕ Close';
+}
+
+function clearSyncData() {
+  localStorage.removeItem('ft_gh_token');
+  localStorage.removeItem('ft_gist_id');
+  document.getElementById('ghToken').value  = '';
+  document.getElementById('ghGistId').value = '';
+  document.getElementById('syncSetupFields').style.display = 'block';
+  updateSyncStatus('Cleared — enter token to re-configure', 'var(--muted)');
+}
+
+// ── Gist API helpers ──
+function ghHeaders() {
+  const token = localStorage.getItem('ft_gh_token');
+  return {
+    'Authorization': `token ${token}`,
+    'Accept': 'application/vnd.github+json',
+    'Content-Type': 'application/json'
+  };
+}
+
+async function gistLoad() {
+  const token  = localStorage.getItem('ft_gh_token');
+  const gistId = localStorage.getItem('ft_gist_id');
+  if (!token)  { updateSyncStatus('⚠ No token configured', '#ff8888'); return; }
+  if (!gistId) { updateSyncStatus('⚠ No Gist ID — save first to create one', '#ff8888'); return; }
+  updateSyncStatus('⏳ Loading…', 'var(--muted)');
   try {
-    const [handle] = await window.showOpenFilePicker({
-      types: [{ description: 'FlowTimer Status', accept: { 'application/json': ['.json'] } }],
-      multiple: false
-    });
-    fileHandle = handle;
-    const file = await handle.getFile();
-    const text = await file.text();
-    const data = JSON.parse(text);
-    applyStatusPayload(data);
-    const saved = data.savedAt ? new Date(data.savedAt).toLocaleString() : 'unknown';
-    setPersistStatus(`📄 ${handle.name}  ·  last saved ${saved}`, 'var(--work)');
-    document.getElementById('saveBtn').textContent = '💾 Save';
-    scheduleAutoSave();
+    const res  = await fetch(`https://api.github.com/gists/${gistId}`, { headers: ghHeaders() });
+    if (!res.ok) throw new Error(`GitHub API error ${res.status}`);
+    const json = await res.json();
+    const raw  = json.files[GIST_FILENAME]?.content;
+    if (!raw) throw new Error('Status file not found in Gist');
+    applyStatusPayload(JSON.parse(raw));
+    const ts = new Date(json.updated_at).toLocaleString();
+    updateSyncStatus(`☁ Loaded · Gist updated ${ts}`, 'var(--work)');
   } catch(e) {
-    if (e.name !== 'AbortError') setPersistStatus('⚠ Could not load file', '#ff8888');
+    updateSyncStatus(`⚠ Load failed: ${e.message}`, '#ff8888');
   }
 }
 
-// Save As — pick location and filename
-async function saveStatusFile() {
-  if (!window.showSaveFilePicker) {
-    // Fallback: download the JSON
-    downloadStatusFile();
-    return;
-  }
+async function gistSave() {
+  const token  = localStorage.getItem('ft_gh_token');
+  const gistId = localStorage.getItem('ft_gist_id');
+  if (!token) { updateSyncStatus('⚠ No token configured', '#ff8888'); return; }
+  updateSyncStatus('⏳ Saving…', 'var(--muted)');
+  const body = {
+    description: 'FlowTimer status',
+    public: false,
+    files: { [GIST_FILENAME]: { content: JSON.stringify(buildStatusPayload(), null, 2) } }
+  };
   try {
-    const handle = await window.showSaveFilePicker({
-      suggestedName: 'flowtimer_status.json',
-      types: [{ description: 'FlowTimer Status', accept: { 'application/json': ['.json'] } }]
-    });
-    fileHandle = handle;
-    await writeToHandle(handle);
-    setPersistStatus(`📄 ${handle.name}  ·  saved just now`, 'var(--work)');
-    document.getElementById('saveBtn').textContent = '💾 Save';
-    scheduleAutoSave();
+    let res, json;
+    if (gistId) {
+      // Update existing Gist
+      res  = await fetch(`https://api.github.com/gists/${gistId}`, {
+        method: 'PATCH', headers: ghHeaders(), body: JSON.stringify(body)
+      });
+    } else {
+      // Create new Gist
+      res  = await fetch('https://api.github.com/gists', {
+        method: 'POST', headers: ghHeaders(), body: JSON.stringify(body)
+      });
+    }
+    if (!res.ok) throw new Error(`GitHub API error ${res.status}`);
+    json = await res.json();
+    // Store/update Gist ID
+    localStorage.setItem('ft_gist_id', json.id);
+    document.getElementById('ghGistId').value = json.id;
+    const ts = new Date().toLocaleTimeString();
+    updateSyncStatus(`☁ Saved · ${ts}`, 'var(--work)');
   } catch(e) {
-    if (e.name !== 'AbortError') setPersistStatus('⚠ Could not save file', '#ff8888');
+    updateSyncStatus(`⚠ Save failed: ${e.message}`, '#ff8888');
   }
 }
 
-// Create a brand-new status (clears current)
-function newStatusFile() {
-  tasks = []; projects = [];
-  fileHandle = null;
-  renderTasks(); renderProjects();
-  clearTimeout(autoSaveTimer);
-  setPersistStatus('New session — no file linked yet', 'var(--muted)');
-  document.getElementById('saveBtn').textContent = '💾 Save As';
-}
-
-async function writeToHandle(handle) {
-  const writable = await handle.createWritable();
-  await writable.write(JSON.stringify(buildStatusPayload(), null, 2));
-  await writable.close();
-}
-
-// Silent auto-save whenever tasks or projects change
+// Auto-save to Gist debounced
 function scheduleAutoSave() {
-  if (!fileHandle) return;
   clearTimeout(autoSaveTimer);
   autoSaveTimer = setTimeout(async () => {
-    try {
-      await writeToHandle(fileHandle);
-      const now = new Date().toLocaleTimeString();
-      setPersistStatus(`📄 ${fileHandle.name}  ·  auto-saved ${now}`, 'var(--work)');
-    } catch(e) {
-      setPersistStatus('⚠ Auto-save failed — check file permissions', '#ff8888');
-    }
-  }, 800); // debounce 800ms
+    if (!localStorage.getItem('ft_gh_token') || !localStorage.getItem('ft_gist_id')) return;
+    await gistSave();
+  }, 2000); // 2s debounce (API calls are slower than file writes)
 }
 
-// Fallback download for browsers without File System Access API
-function downloadStatusFile() {
-  const blob = new Blob([JSON.stringify(buildStatusPayload(), null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'flowtimer_status.json';
-  a.click();
-  setPersistStatus('📥 Downloaded flowtimer_status.json', 'var(--warmup)');
-}
-
-// Also save when task/project text is edited inline (blur events already update the array)
+// Also save when task/project text is edited inline
 document.addEventListener('focusout', e => {
   if (e.target.classList.contains('task-text')) scheduleAutoSave();
 });
+
+// Load config from localStorage on startup
+loadGistConfig();
+
 </script>
 </body>
 </html>
