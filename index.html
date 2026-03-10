@@ -356,9 +356,9 @@ body {
 .paused-banner {
   display: none; text-align: center; font-size: 11px;
   color: var(--muted); letter-spacing: 2px; margin-bottom: 8px;
-  animation: blink 1.2s step-end infinite;
+  animation: ease-in-out 1.2s step-end infinite;
 }
-@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+@keyframes ease-in-out { 0%,100%{opacity:1} 50%{opacity:0} }
 .paused-banner.show { display: block; }
 
 /* Project rename button */
