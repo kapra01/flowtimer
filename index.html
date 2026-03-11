@@ -356,12 +356,31 @@ body {
 .paused-banner {
   display: none; text-align: center; font-size: 11px;
   color: var(--muted); letter-spacing: 2px; margin-bottom: 8px;
-  animation: ease-in-out 1.2s step-end infinite;
+  animation: pausePulse 2.4s ease-in-out infinite;
 }
-@keyframes ease-in-out { 0%,100%{opacity:1} 50%{opacity:0} }
+@keyframes pausePulse { 0%,100%{opacity:0.2} 50%{opacity:0.8} }
 .paused-banner.show { display: block; }
 
-/* Project rename button */
+/* Active / currently-working-on item */
+.task-item.active-task {
+  border-color: var(--work);
+  background: linear-gradient(90deg, rgba(77,240,160,0.08) 0%, var(--faint) 100%);
+  box-shadow: inset 3px 0 0 var(--work);
+}
+.task-item.active-proj {
+  border-color: var(--warmup);
+  background: linear-gradient(90deg, rgba(247,201,72,0.08) 0%, var(--faint) 100%);
+  box-shadow: inset 3px 0 0 var(--warmup);
+}
+.focus-btn {
+  background: transparent; border: 1px solid var(--border);
+  border-radius: 5px; color: var(--muted); font-size: 10px;
+  padding: 2px 6px; cursor: pointer; flex-shrink: 0;
+  transition: all .2s; line-height: 1.4;
+}
+.focus-btn:hover { border-color: var(--work); color: var(--work); }
+.focus-btn.active { border-color: var(--work); color: var(--work); background: rgba(77,240,160,0.1); }
+.focus-btn.active-proj-btn { border-color: var(--warmup); color: var(--warmup); background: rgba(247,201,72,0.1); }
 .proj-rename-btn {
   background: transparent; border: 1px solid transparent;
   border-radius: 6px; color: var(--muted); font-size: 12px;
@@ -1001,12 +1020,15 @@ function renderTasks() {
     return;
   }
   list.innerHTML = tasks.map((t, i) => `
-    <div class="task-item ${t.done ? 'done' : ''}">
+    <div class="task-item ${t.done ? 'done' : ''} ${t.active ? 'active-task' : ''}">
       <div class="task-check" onclick="toggleTask(${i})"></div>
       <div class="task-text" contenteditable="true"
         onblur="taskData['${taskTab}'][${i}].text=this.textContent.trim();scheduleAutoSave()"
         onfocus="this.style.color='var(--text)'"
         spellcheck="false">${t.text}</div>
+      <button class="focus-btn ${t.active ? 'active' : ''}"
+        title="${t.active ? 'Currently working on this' : 'Mark as current'}"
+        onclick="setActiveTask(${i})">▶</button>
       <button class="task-del" onclick="deleteTask(${i})">✕</button>
     </div>
   `).join('');
@@ -1028,6 +1050,14 @@ function toggleTask(i) {
 }
 function deleteTask(i) {
   taskData[taskTab].splice(i, 1);
+  renderTasks(); scheduleAutoSave();
+}
+function setActiveTask(i) {
+  const tasks = taskData[taskTab];
+  // Toggle off if already active, otherwise set exclusively
+  const wasActive = tasks[i].active;
+  tasks.forEach(t => t.active = false);
+  if (!wasActive) tasks[i].active = true;
   renderTasks(); scheduleAutoSave();
 }
 
@@ -1073,7 +1103,7 @@ function renderProjects() {
   }
 
   list.innerHTML = projects.map((p, i) => `
-    <div class="task-item proj-row ${p.done ? 'done' : ''} ${i === curSel ? 'proj-selected' : ''}"
+    <div class="task-item proj-row ${p.done ? 'done' : ''} ${i === curSel ? 'proj-selected' : ''} ${p.active ? 'active-proj' : ''}"
          id="projRow${i}" onclick="selectProject(${i})">
       <div class="task-check"
         style="${p.done ? 'border-color:var(--warmup);background:var(--warmup)' : 'border-color:var(--warmup)'}"
@@ -1081,6 +1111,9 @@ function renderProjects() {
         ${p.done ? '<span style="font-size:9px;color:var(--bg);font-weight:900">✓</span>' : ''}
       </div>
       <span class="task-text" style="pointer-events:none;user-select:none">${p.text}</span>
+      <button class="focus-btn ${p.active ? 'active active-proj-btn' : ''}"
+        title="${p.active ? 'Currently working on this' : 'Mark as current'}"
+        onclick="event.stopPropagation();setActiveProject(${i})">▶</button>
       <button class="proj-rename-btn" title="Rename" onclick="event.stopPropagation();startRenameProject(${i})">✏</button>
       <button class="task-del" onclick="event.stopPropagation();deleteProject(${i})">✕</button>
     </div>
@@ -1166,6 +1199,13 @@ function toggleProject(i) {
 }
 function deleteProject(i) {
   projData[projTab].splice(i, 1);
+  renderProjects(); scheduleAutoSave();
+}
+function setActiveProject(i) {
+  const projects = projData[projTab];
+  const wasActive = projects[i].active;
+  projects.forEach(p => p.active = false);
+  if (!wasActive) projects[i].active = true;
   renderProjects(); scheduleAutoSave();
 }
 
