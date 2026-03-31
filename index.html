@@ -280,6 +280,15 @@ body {
   transition: opacity .2s;
 }
 .task-item.done { opacity: 0.4; }
+.drag-handle {
+  color: var(--muted); font-size: 14px; cursor: grab;
+  flex-shrink: 0; padding: 0 2px; line-height: 1;
+  user-select: none; touch-action: none;
+}
+.drag-handle:hover { color: var(--text); }
+.drag-handle:active { cursor: grabbing; }
+.sortable-ghost { opacity: 0.3; border: 1px dashed var(--work); }
+.sortable-drag  { opacity: 0.95; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
 .task-check {
   width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--muted);
   cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
@@ -356,9 +365,7 @@ body {
 .paused-banner {
   display: none; text-align: center; font-size: 11px;
   color: var(--muted); letter-spacing: 2px; margin-bottom: 8px;
-  animation: pausePulse 2.4s ease-in-out infinite;
 }
-@keyframes pausePulse { 0%,100%{opacity:0.2} 50%{opacity:0.8} }
 .paused-banner.show { display: block; }
 
 /* Active / currently-working-on item */
@@ -456,6 +463,7 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
 </head>
 <body>
 
@@ -1021,6 +1029,7 @@ function renderTasks() {
   }
   list.innerHTML = tasks.map((t, i) => `
     <div class="task-item ${t.done ? 'done' : ''} ${t.active ? 'active-task' : ''}">
+      <div class="drag-handle" title="Drag to reorder">⠿</div>
       <div class="task-check" onclick="toggleTask(${i})"></div>
       <div class="task-text" contenteditable="true"
         onblur="taskData['${taskTab}'][${i}].text=this.textContent.trim();scheduleAutoSave()"
@@ -1032,6 +1041,22 @@ function renderTasks() {
       <button class="task-del" onclick="deleteTask(${i})">✕</button>
     </div>
   `).join('');
+
+  if (window.Sortable) {
+    Sortable.create(list, {
+      handle: '.drag-handle',
+      animation: 150,
+      ghostClass: 'sortable-ghost',
+      dragClass: 'sortable-drag',
+      onEnd(evt) {
+        const arr = taskData[taskTab];
+        const [moved] = arr.splice(evt.oldIndex, 1);
+        arr.splice(evt.newIndex, 0, moved);
+        renderTasks();
+        scheduleAutoSave();
+      }
+    });
+  }
 }
 
 function addTask() {
@@ -1105,6 +1130,7 @@ function renderProjects() {
   list.innerHTML = projects.map((p, i) => `
     <div class="task-item proj-row ${p.done ? 'done' : ''} ${i === curSel ? 'proj-selected' : ''} ${p.active ? 'active-proj' : ''}"
          id="projRow${i}" onclick="selectProject(${i})">
+      <div class="drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">⠿</div>
       <div class="task-check"
         style="${p.done ? 'border-color:var(--warmup);background:var(--warmup)' : 'border-color:var(--warmup)'}"
         onclick="event.stopPropagation();toggleProject(${i})">
@@ -1118,6 +1144,28 @@ function renderProjects() {
       <button class="task-del" onclick="event.stopPropagation();deleteProject(${i})">✕</button>
     </div>
   `).join('');
+
+  if (window.Sortable) {
+    Sortable.create(list, {
+      handle: '.drag-handle',
+      animation: 150,
+      ghostClass: 'sortable-ghost',
+      dragClass: 'sortable-drag',
+      onEnd(evt) {
+        const arr = projData[projTab];
+        const [moved] = arr.splice(evt.oldIndex, 1);
+        arr.splice(evt.newIndex, 0, moved);
+        const sel = selectedProject[projTab];
+        if (sel !== null) {
+          if (sel === evt.oldIndex) selectedProject[projTab] = evt.newIndex;
+          else if (sel > evt.oldIndex && sel <= evt.newIndex) selectedProject[projTab]--;
+          else if (sel < evt.oldIndex && sel >= evt.newIndex) selectedProject[projTab]++;
+        }
+        renderProjects();
+        scheduleAutoSave();
+      }
+    });
+  }
 
   if (curSel !== null) updateNotesPanel(curSel);
 }
