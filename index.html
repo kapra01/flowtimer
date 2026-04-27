@@ -427,36 +427,58 @@ body {
 .task-item.proj-row:hover { border-color: #3a3a3a; }
 
 /* Notes panel */
-.notes-panel {
-  background: var(--card); border: 1px solid var(--border);
-  border-radius: 18px; padding: 20px;
+/* ── NOTES OVERLAY (full-screen wordpad) ── */
+.notes-overlay {
   display: none;
+  position: fixed; inset: 0; z-index: 50;
+  background: var(--bg);
+  flex-direction: column;
+  animation: notesFadeIn .18s ease;
 }
-.notes-panel.visible { display: block; }
-.notes-project-label {
+.notes-overlay.visible { display: flex; }
+@keyframes notesFadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+.notes-overlay-header {
+  display: flex; align-items: center; gap: 16px;
+  padding: 16px 28px; border-bottom: 1px solid var(--border);
+  background: var(--card); flex-shrink: 0;
+}
+.notes-back-btn {
+  background: var(--faint); border: 1px solid var(--border);
+  border-radius: 8px; color: var(--text);
+  font-family: 'Outfit', sans-serif; font-size: 13px; font-weight: 600;
+  padding: 6px 14px; cursor: pointer; transition: all .2s; flex-shrink: 0;
+}
+.notes-back-btn:hover { border-color: var(--warmup); color: var(--warmup); }
+
+.notes-overlay-meta { flex: 1; min-width: 0; }
+.notes-overlay-label {
   font-size: 10px; letter-spacing: 2px; color: var(--warmup);
-  font-weight: 700; margin-bottom: 4px; text-transform: uppercase;
+  font-weight: 700; text-transform: uppercase; margin-bottom: 2px;
 }
-.notes-project-name {
-  font-size: 14px; font-weight: 700; margin-bottom: 12px;
+.notes-overlay-title {
+  font-size: 18px; font-weight: 900; letter-spacing: -0.3px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.notes-textarea {
-  width: 100%; min-height: 200px;
-  background: var(--faint); border: 1px solid var(--border);
-  border-radius: 10px; color: var(--text);
-  font-family: 'JetBrains Mono', monospace; font-size: 12px;
-  line-height: 1.7; padding: 12px 14px;
-  resize: vertical; outline: none;
-  transition: border-color .2s;
+.notes-overlay-hint {
+  font-size: 11px; color: var(--muted); letter-spacing: 1px;
+  font-family: 'JetBrains Mono', monospace; flex-shrink: 0;
 }
-.notes-textarea:focus { border-color: var(--warmup); }
-.notes-textarea::placeholder { color: var(--muted); }
-.notes-saved-hint {
-  font-size: 10px; color: var(--muted); letter-spacing: 1px;
-  margin-top: 6px; min-height: 14px; text-align: right;
-  font-family: 'JetBrains Mono', monospace;
+.notes-overlay-body {
+  flex: 1; display: flex; flex-direction: column;
+  padding: 28px 10vw; overflow: hidden;
 }
+.notes-overlay-textarea {
+  flex: 1; width: 100%;
+  background: transparent; border: none; outline: none;
+  color: var(--text); font-family: 'JetBrains Mono', monospace;
+  font-size: 14px; line-height: 1.9; resize: none;
+  caret-color: var(--warmup);
+}
+.notes-overlay-textarea::placeholder { color: var(--muted); }
+
+/* Hide old inline notes panel */
+.notes-panel { display: none !important; }
 
 /* Scrollbar global */
 ::-webkit-scrollbar { width: 4px; }
@@ -1140,6 +1162,8 @@ function renderProjects() {
       <button class="focus-btn ${p.active ? 'active active-proj-btn' : ''}"
         title="${p.active ? 'Currently working on this' : 'Mark as current'}"
         onclick="event.stopPropagation();setActiveProject(${i})">▶</button>
+      <button class="proj-rename-btn" title="Open notes" style="color:var(--warmup);border-color:transparent"
+        onclick="event.stopPropagation();openNotesOverlay(${i})">📝</button>
       <button class="proj-rename-btn" title="Rename" onclick="event.stopPropagation();startRenameProject(${i})">✏</button>
       <button class="task-del" onclick="event.stopPropagation();deleteProject(${i})">✕</button>
     </div>
@@ -1206,29 +1230,63 @@ function startRenameProject(i) {
 }
 
 function updateNotesPanel(i) {
-  const p = projData[projTab][i];
-  if (!p) return;
-  const label = projTab === 'work' ? '💼 Office Project' : '🏠 Home Project';
-  document.getElementById('notesPanel').classList.add('visible');
-  document.getElementById('notesProjName').textContent = p.text || 'Untitled project';
-  document.querySelector('.notes-project-label').textContent = label + ' · Notes';
-  const ta = document.getElementById('notesTextarea');
-  if (document.activeElement !== ta) ta.value = p.notes || '';
-  document.getElementById('notesSavedHint').textContent = '';
+  // No-op — notes are now opened via the overlay
 }
 
 let notesSaveTimer = null;
-function saveNotes() {
-  const sel = selectedProject[projTab];
-  if (sel === null || !projData[projTab][sel]) return;
-  projData[projTab][sel].notes = document.getElementById('notesTextarea').value;
+function saveNotes() {}
+
+// ── NOTES OVERLAY ──
+let overlayProjTab = null;
+let overlayProjIndex = null;
+
+function openNotesOverlay(i) {
+  overlayProjTab   = projTab;
+  overlayProjIndex = i;
+  const p = projData[projTab][i];
+  if (!p) return;
+  const label = projTab === 'work' ? '💼 Office Project · Notes' : '🏠 Home Project · Notes';
+  document.getElementById('overlayLabel').textContent     = label;
+  document.getElementById('overlayTitle').textContent     = p.text || 'Untitled project';
+  document.getElementById('overlayTextarea').value        = p.notes || '';
+  document.getElementById('overlaySavedHint').textContent = '';
+  document.getElementById('notesOverlay').classList.add('visible');
+  document.getElementById('overlayTextarea').focus();
+}
+
+function closeNotesOverlay() {
+  flushOverlayNotes();
+  document.getElementById('notesOverlay').classList.remove('visible');
+  overlayProjTab   = null;
+  overlayProjIndex = null;
+}
+
+function flushOverlayNotes() {
+  if (overlayProjTab === null || overlayProjIndex === null) return;
+  const p = projData[overlayProjTab][overlayProjIndex];
+  if (!p) return;
+  p.notes = document.getElementById('overlayTextarea').value;
+  scheduleAutoSave();
+}
+
+function saveOverlayNotes() {
+  if (overlayProjTab === null || overlayProjIndex === null) return;
+  const p = projData[overlayProjTab][overlayProjIndex];
+  if (!p) return;
+  p.notes = document.getElementById('overlayTextarea').value;
   clearTimeout(notesSaveTimer);
   notesSaveTimer = setTimeout(() => {
-    document.getElementById('notesSavedHint').textContent = 'saved ✓';
-    setTimeout(() => { document.getElementById('notesSavedHint').textContent = ''; }, 2000);
+    document.getElementById('overlaySavedHint').textContent = 'saved ✓';
+    setTimeout(() => { document.getElementById('overlaySavedHint').textContent = ''; }, 2000);
     scheduleAutoSave();
   }, 600);
 }
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('notesOverlay').classList.contains('visible')) {
+    closeNotesOverlay();
+  }
+});
 
 function addProject() {
   const inp = document.getElementById('projInput');
@@ -1492,5 +1550,22 @@ document.addEventListener('focusout', e => {
 loadGistConfig();
 
 </script>
+<!-- Notes Overlay (full-screen wordpad) -->
+<div class="notes-overlay" id="notesOverlay">
+  <div class="notes-overlay-header">
+    <button class="notes-back-btn" onclick="closeNotesOverlay()">← Back</button>
+    <div class="notes-overlay-meta">
+      <div class="notes-overlay-label" id="overlayLabel">Project Notes</div>
+      <div class="notes-overlay-title" id="overlayTitle">—</div>
+    </div>
+    <div class="notes-overlay-hint" id="overlaySavedHint"></div>
+  </div>
+  <div class="notes-overlay-body">
+    <textarea class="notes-overlay-textarea" id="overlayTextarea"
+      placeholder="Start typing your notes here..."
+      oninput="saveOverlayNotes()"></textarea>
+  </div>
+</div>
+
 </body>
 </html>
